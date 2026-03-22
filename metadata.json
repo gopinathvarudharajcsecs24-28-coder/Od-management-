@@ -1,0 +1,5 @@
+{
+  "name": "Student On-Duty Management System",
+  "description": "A full-stack system for students to apply for On-Duty (OD) leave, and for faculty and admins to manage and approve requests.",
+  "requestFramePermissions": []
+}
