@@ -1,4 +1,4 @@
-const API_URL = '';
+const API_URL = typeof window !== 'undefined' ? window.location.origin : '';
 
 export interface User {
   id: string;
@@ -68,6 +68,10 @@ export const api = {
       method: 'POST',
       body: formData,
     });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to submit OD request');
+    }
     return res.json();
   },
 

@@ -466,6 +466,8 @@ export default function App() {
 function StudentDashboard({ user }: { user: User }) {
   const [requests, setRequests] = useState<ODRequest[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const prevRequestsRef = React.useRef<ODRequest[]>([]);
   const [formData, setFormData] = useState({
     department: user.department || 'cse',
     year: user.year || 'first-year',
@@ -481,10 +483,31 @@ function StudentDashboard({ user }: { user: User }) {
 
   const fetchRequests = async () => {
     const data = await api.getODRequests(user.id, 'student');
+    
+    // Check for status changes to show notifications
+    if (prevRequestsRef.current.length > 0) {
+      data.forEach(newReq => {
+        const oldReq = prevRequestsRef.current.find(r => r.id === newReq.id);
+        if (oldReq && oldReq.status === 'Pending' && newReq.status !== 'Pending') {
+          setNotification({
+            message: `Your OD request for ${newReq.date} has been ${newReq.status.toLowerCase()}!`,
+            type: newReq.status === 'Approved' ? 'success' : 'error'
+          });
+          // Auto-hide notification after 10 seconds
+          setTimeout(() => setNotification(null), 10000);
+        }
+      });
+    }
+    
+    prevRequestsRef.current = data;
     setRequests(data);
   };
 
-  useEffect(() => { fetchRequests(); }, []);
+  useEffect(() => { 
+    fetchRequests();
+    const interval = setInterval(fetchRequests, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -499,22 +522,57 @@ function StudentDashboard({ user }: { user: User }) {
     data.append('reason', formData.reason);
     if (formData.proof) data.append('proof', formData.proof);
 
-    await api.applyOD(data);
-    setShowForm(false);
-    fetchRequests();
-    setFormData({ 
-      department: user.department || 'cse', 
-      year: user.year || 'first-year', 
-      date: '', 
-      ongoing_time: '', 
-      arrival_time: '', 
-      reason: '', 
-      proof: null 
-    });
+    try {
+      await api.applyOD(data);
+      setShowForm(false);
+      setNotification({
+        message: 'Your OD request has been submitted successfully and sent to faculty!',
+        type: 'success'
+      });
+      setTimeout(() => setNotification(null), 5000);
+      fetchRequests();
+      setFormData({ 
+        department: user.department || 'cse', 
+        year: user.year || 'first-year', 
+        date: '', 
+        ongoing_time: '', 
+        arrival_time: '', 
+        reason: '', 
+        proof: null 
+      });
+    } catch (err: any) {
+      setNotification({
+        message: err.message || 'Failed to submit request. Please try again.',
+        type: 'error'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    }
   };
 
   return (
     <div className="max-w-5xl mx-auto">
+      <AnimatePresence>
+        {notification && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className={cn(
+              "mb-6 p-4 rounded-xl border flex items-center justify-between shadow-lg",
+              notification.type === 'success' ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"
+            )}
+          >
+            <div className="flex items-center gap-3">
+              {notification.type === 'success' ? <CheckCircle size={20} /> : <XCircle size={20} />}
+              <p className="font-bold">{notification.message}</p>
+            </div>
+            <button onClick={() => setNotification(null)} className="text-stone-400 hover:text-stone-600">
+              <XCircle size={18} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-bold text-stone-900">Welcome, {user.name}</h2>
@@ -759,7 +817,11 @@ function FacultyDashboard({ user }: { user: User }) {
     setRequests(data);
   };
 
-  useEffect(() => { fetchRequests(); }, []);
+  useEffect(() => { 
+    fetchRequests();
+    const interval = setInterval(fetchRequests, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleAction = async (status: 'Approved' | 'Rejected') => {
     if (!selectedReq) return;
@@ -893,17 +955,25 @@ function FacultyDashboard({ user }: { user: User }) {
 function AdminDashboard({ user }: { user: User }) {
   const [users, setUsers] = useState<User[]>([]);
   const [requests, setRequests] = useState<ODRequest[]>([]);
+  const [selectedReq, setSelectedReq] = useState<ODRequest | null>(null);
+
+  const fetchData = async () => {
+    const [uData, rData] = await Promise.all([
+      api.getAllUsers(),
+      api.getODRequests()
+    ]);
+    setUsers(uData);
+    setRequests(rData);
+    if (selectedReq) {
+      const updated = rData.find(r => r.id === selectedReq.id);
+      if (updated) setSelectedReq(updated);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      const [uData, rData] = await Promise.all([
-        api.getAllUsers(),
-        api.getODRequests()
-      ]);
-      setUsers(uData);
-      setRequests(rData);
-    };
     fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -952,18 +1022,105 @@ function AdminDashboard({ user }: { user: User }) {
             <button className="text-xs text-emerald-600 font-semibold hover:underline">View All</button>
           </div>
           <div className="divide-y divide-stone-100">
-            {requests.slice(0, 5).map(r => (
-              <div key={r.id} className="p-4 flex items-center justify-between">
+            {requests.slice(0, 10).map(r => (
+              <div key={r.id} className="p-4 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer" onClick={() => setSelectedReq(r)}>
                 <div>
                   <p className="text-sm font-semibold text-stone-900">{r.student_name}</p>
-                  <p className="text-xs text-stone-500">{r.date} • {r.department}</p>
+                  <p className="text-xs text-stone-500">{r.date} • {r.department.toUpperCase()}</p>
                 </div>
-                <StatusBadge status={r.status} />
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={r.status} />
+                  <button className="text-xs text-stone-400 hover:text-emerald-600">Details</button>
+                </div>
               </div>
             ))}
+            {requests.length === 0 && (
+              <div className="p-10 text-center text-stone-400 text-sm">No requests yet</div>
+            )}
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {selectedReq && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-black/5"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-stone-900">Request Details</h3>
+                <StatusBadge status={selectedReq.status} />
+              </div>
+              
+              <div className="space-y-4 mb-8 p-5 bg-stone-50 rounded-2xl border border-stone-100">
+                <div className="grid grid-cols-2 gap-y-4">
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Student Name</p>
+                    <p className="text-sm font-semibold text-stone-900">{selectedReq.student_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Department</p>
+                    <p className="text-sm font-semibold text-stone-900 uppercase">{selectedReq.department}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Year</p>
+                    <p className="text-sm font-semibold text-stone-900 capitalize">{selectedReq.year.replace('-', ' ')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Date</p>
+                    <p className="text-sm font-semibold text-stone-900">{selectedReq.date}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Ongoing Time</p>
+                    <p className="text-sm font-semibold text-stone-900">{selectedReq.ongoing_time || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Arrival Time</p>
+                    <p className="text-sm font-semibold text-stone-900">{selectedReq.arrival_time || '-'}</p>
+                  </div>
+                </div>
+                
+                <div className="pt-4 border-t border-stone-200">
+                  <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Reason</p>
+                  <p className="text-sm text-stone-700 leading-relaxed">{selectedReq.reason}</p>
+                </div>
+
+                {selectedReq.proof_file && (
+                  <div className="pt-4 border-t border-stone-200">
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-2">Proof Document</p>
+                    <a 
+                      href={`/uploads/${selectedReq.proof_file}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all"
+                    >
+                      <FileText size={14} />
+                      View Attachment
+                    </a>
+                  </div>
+                )}
+
+                {selectedReq.remarks && (
+                  <div className="pt-4 border-t border-stone-200">
+                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Faculty Remarks</p>
+                    <p className="text-sm text-stone-600 italic">"{selectedReq.remarks}"</p>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                onClick={() => setSelectedReq(null)}
+                className="w-full py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-all"
+              >
+                Close Details
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
