@@ -1,4 +1,4 @@
-const API_URL = typeof window !== 'undefined' ? window.location.origin : '';
+const API_URL = '';
 
 export interface User {
   id: string;
@@ -75,11 +75,17 @@ export const api = {
     return res.json();
   },
 
-  async getODRequests(student_id?: string, role?: string): Promise<ODRequest[]> {
+  async getODRequests(student_id?: string, role?: string, department?: string): Promise<ODRequest[]> {
     const params = new URLSearchParams();
     if (student_id) params.append('student_id', student_id);
     if (role) params.append('role', role);
+    if (department) params.append('department', department);
     const res = await fetch(`${API_URL}/api/od?${params.toString()}`);
+    return res.json();
+  },
+
+  async getAdminStats(): Promise<any> {
+    const res = await fetch(`${API_URL}/api/admin/stats`);
     return res.json();
   },
 

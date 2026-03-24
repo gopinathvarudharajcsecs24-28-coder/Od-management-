@@ -35,6 +35,12 @@ async function startServer() {
   // User Management & Auth
   app.post('/api/auth/register', (req, res) => {
     const { name, email, password, role, department, year } = req.body;
+    
+    // Restrict admin registration
+    if (role === 'admin' || email.toLowerCase() === 'admin@example.com') {
+      return res.status(403).json({ error: 'Unauthorized role or email' });
+    }
+
     const id = Date.now().toString(); // Simple ID generation
     try {
       const stmt = db.prepare('INSERT INTO users (id, name, email, password, role, department, year) VALUES (?, ?, ?, ?, ?, ?, ?)');
@@ -55,6 +61,13 @@ async function startServer() {
     try {
       const user = db.prepare('SELECT id, name, email, password, role, department, year FROM users WHERE email = ? AND password = ?').get(email, password);
       if (user) {
+        // Enforce admin email restriction
+        if (user.role === 'admin' && user.email.toLowerCase() !== 'admin@example.com') {
+          return res.status(403).json({ error: 'Unauthorized admin access' });
+        }
+
+        // Update login stats
+        db.prepare('UPDATE users SET login_count = login_count + 1, last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
         res.json(user);
       } else {
         res.status(401).json({ error: 'Invalid credentials' });
@@ -116,12 +129,16 @@ async function startServer() {
   });
 
   app.get('/api/od', (req, res) => {
-    const { student_id, role } = req.query;
+    const { student_id, role, department } = req.query;
     try {
       let requests;
       if (role === 'student') {
         requests = db.prepare('SELECT * FROM od_requests WHERE student_id = ? ORDER BY created_at DESC').all(student_id);
+      } else if (role === 'faculty') {
+        // Faculty only sees requests from their department
+        requests = db.prepare('SELECT * FROM od_requests WHERE department = ? ORDER BY created_at DESC').all(department);
       } else {
+        // Admin sees all
         requests = db.prepare('SELECT * FROM od_requests ORDER BY created_at DESC').all();
       }
       res.json(requests);
@@ -136,6 +153,29 @@ async function startServer() {
       const stmt = db.prepare('UPDATE od_requests SET status = ?, remarks = ? WHERE id = ?');
       stmt.run(status, remarks, req.params.id);
       res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  app.get('/api/admin/stats', (req, res) => {
+    try {
+      const totalStudents = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'student'").get().count;
+      const facultyStats = db.prepare("SELECT name, email, department, login_count, last_login FROM users WHERE role = 'faculty'").all();
+      const odStats = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) as approved,
+          SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending,
+          SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END) as rejected
+        FROM od_requests
+      `).get();
+      
+      res.json({
+        totalStudents,
+        facultyStats,
+        odStats
+      });
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });
     }
@@ -160,8 +200,11 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log('Database initialized and ready.');
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Failed to start server:', err);
+});

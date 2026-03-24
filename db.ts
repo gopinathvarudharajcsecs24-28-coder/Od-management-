@@ -12,7 +12,9 @@ db.exec(`
     password TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('student', 'faculty', 'admin')),
     department TEXT,
-    year TEXT
+    year TEXT,
+    last_login DATETIME,
+    login_count INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS od_requests (
@@ -63,6 +65,15 @@ try {
   const hasODYear = odTableInfo.some((col: any) => col.name === 'year');
   if (!hasODYear) {
     db.exec("ALTER TABLE od_requests ADD COLUMN year TEXT");
+  }
+
+  const hasLastLogin = tableInfo.some((col: any) => col.name === 'last_login');
+  if (!hasLastLogin) {
+    db.exec("ALTER TABLE users ADD COLUMN last_login DATETIME");
+  }
+  const hasLoginCount = tableInfo.some((col: any) => col.name === 'login_count');
+  if (!hasLoginCount) {
+    db.exec("ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0");
   }
 } catch (e) {
   console.error("Migration error:", e);

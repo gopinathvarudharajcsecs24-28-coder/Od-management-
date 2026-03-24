@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, User, ODRequest } from './services/api';
-import { LogOut, User as UserIcon, FileText, CheckCircle, XCircle, Clock, Plus, Shield, Users, BarChart, Edit, Save, Eye, EyeOff } from 'lucide-react';
+import { LogOut, User as UserIcon, FileText, CheckCircle, XCircle, Clock, Plus, Shield, Users, BarChart, Edit, Save, Eye, EyeOff, ChevronRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -457,7 +457,14 @@ export default function App() {
       <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
         {user.role === 'student' && <StudentDashboard user={user} />}
         {user.role === 'faculty' && <FacultyDashboard user={user} />}
-        {user.role === 'admin' && <AdminDashboard user={user} />}
+        {user.role === 'admin' && user.email === 'admin@example.com' && <AdminDashboard user={user} />}
+        {user.role === 'admin' && user.email !== 'admin@example.com' && (
+          <div className="text-center py-20">
+            <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-stone-900">Access Denied</h2>
+            <p className="text-stone-500">Only the primary administrator can access this panel.</p>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -813,7 +820,7 @@ function FacultyDashboard({ user }: { user: User }) {
   const [remarks, setRemarks] = useState('');
 
   const fetchRequests = async () => {
-    const data = await api.getODRequests(undefined, 'faculty');
+    const data = await api.getODRequests(undefined, 'faculty', user.department);
     setRequests(data);
   };
 
@@ -953,20 +960,27 @@ function FacultyDashboard({ user }: { user: User }) {
 }
 
 function AdminDashboard({ user }: { user: User }) {
-  const [users, setUsers] = useState<User[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [requests, setRequests] = useState<ODRequest[]>([]);
   const [selectedReq, setSelectedReq] = useState<ODRequest | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'faculty' | 'requests'>('overview');
+  const [filterDepartment, setFilterDepartment] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
 
   const fetchData = async () => {
-    const [uData, rData] = await Promise.all([
-      api.getAllUsers(),
-      api.getODRequests()
-    ]);
-    setUsers(uData);
-    setRequests(rData);
-    if (selectedReq) {
-      const updated = rData.find(r => r.id === selectedReq.id);
-      if (updated) setSelectedReq(updated);
+    try {
+      const [sData, rData] = await Promise.all([
+        api.getAdminStats(),
+        api.getODRequests()
+      ]);
+      setStats(sData);
+      setRequests(rData);
+      if (selectedReq) {
+        const updated = rData.find(r => r.id === selectedReq.id);
+        if (updated) setSelectedReq(updated);
+      }
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
     }
   };
 
@@ -976,147 +990,376 @@ function AdminDashboard({ user }: { user: User }) {
     return () => clearInterval(interval);
   }, []);
 
+  const departments = Array.from(new Set(requests.map(r => r.department)));
+
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-stone-900">Admin Control Center</h2>
-        <p className="text-stone-500">System-wide overview and user management</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <StatCard icon={<Users className="text-blue-500" />} label="Total Users" value={users.length} color="blue" />
-        <StatCard icon={<FileText className="text-stone-500" />} label="Total ODs" value={requests.length} color="stone" />
-        <StatCard icon={<CheckCircle className="text-emerald-500" />} label="Approved" value={requests.filter(r => r.status === 'Approved').length} color="emerald" />
-        <StatCard icon={<Clock className="text-amber-500" />} label="Pending" value={requests.filter(r => r.status === 'Pending').length} color="amber" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
-          <div className="p-6 border-b border-stone-100 flex justify-between items-center">
-            <h3 className="font-bold text-stone-900">Recent Users</h3>
-            <button className="text-xs text-emerald-600 font-semibold hover:underline">View All</button>
-          </div>
-          <div className="divide-y divide-stone-100">
-            {users.slice(0, 5).map(u => (
-              <div key={u.id} className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-xs font-bold text-stone-500">
-                    {u.name[0]}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-stone-900">{u.name}</p>
-                    <p className="text-xs text-stone-500">{u.email}</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-stone-100 rounded-md text-stone-500">
-                  {u.role}
-                </span>
-              </div>
-            ))}
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-4xl font-black text-stone-900 tracking-tight">ADMIN PANEL</h2>
+          <p className="text-stone-500 font-medium">System Monitoring & Departmental Overview</p>
         </div>
-
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
-          <div className="p-6 border-b border-stone-100 flex justify-between items-center">
-            <h3 className="font-bold text-stone-900">Recent OD Requests</h3>
-            <button className="text-xs text-emerald-600 font-semibold hover:underline">View All</button>
-          </div>
-          <div className="divide-y divide-stone-100">
-            {requests.slice(0, 10).map(r => (
-              <div key={r.id} className="p-4 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer" onClick={() => setSelectedReq(r)}>
-                <div>
-                  <p className="text-sm font-semibold text-stone-900">{r.student_name}</p>
-                  <p className="text-xs text-stone-500">{r.date} • {r.department.toUpperCase()}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={r.status} />
-                  <button className="text-xs text-stone-400 hover:text-emerald-600">Details</button>
-                </div>
-              </div>
-            ))}
-            {requests.length === 0 && (
-              <div className="p-10 text-center text-stone-400 text-sm">No requests yet</div>
-            )}
-          </div>
+        <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200">
+          {(['overview', 'faculty', 'requests'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-6 py-2 rounded-lg text-sm font-bold transition-all uppercase tracking-wider",
+                activeTab === tab 
+                  ? "bg-white text-stone-900 shadow-sm" 
+                  : "text-stone-500 hover:text-stone-700"
+              )}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </div>
+
+      {activeTab === 'overview' && stats && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-8"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <StatCard icon={<Users className="text-blue-600" />} label="Total Students" value={stats.totalStudents} color="blue" />
+            <StatCard icon={<FileText className="text-stone-600" />} label="Total Requests" value={stats.odStats.total || 0} color="stone" />
+            <StatCard icon={<CheckCircle className="text-emerald-600" />} label="Approved" value={stats.odStats.approved || 0} color="emerald" />
+            <StatCard icon={<Clock className="text-amber-600" />} label="Pending" value={stats.odStats.pending || 0} color="amber" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">
+              <div className="p-8 border-b border-stone-100">
+                <h3 className="text-xl font-bold text-stone-900">Departmental Distribution</h3>
+                <p className="text-sm text-stone-500">OD requests organized by department</p>
+              </div>
+              <div className="p-8 space-y-8">
+                {departments.length > 0 ? departments.map(dept => {
+                  const deptReqs = requests.filter(r => r.department === dept);
+                  const approved = deptReqs.filter(r => r.status === 'Approved').length;
+                  return (
+                    <div key={dept} className="space-y-3">
+                      <div className="flex justify-between items-end">
+                        <span className="text-sm font-black uppercase tracking-widest text-stone-900">{dept}</span>
+                        <span className="text-xs font-bold text-stone-500">{approved} / {deptReqs.length} Approved</span>
+                      </div>
+                      <div className="h-3 bg-stone-100 rounded-full overflow-hidden flex">
+                        <div 
+                          className="h-full bg-emerald-500 transition-all duration-1000" 
+                          style={{ width: `${(approved / deptReqs.length) * 100}%` }}
+                        />
+                        <div 
+                          className="h-full bg-amber-400 transition-all duration-1000" 
+                          style={{ width: `${(deptReqs.filter(r => r.status === 'Pending').length / deptReqs.length) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <div className="py-20 text-center text-stone-400 font-medium">No departmental data available</div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-stone-900 rounded-3xl p-8 text-white shadow-xl flex flex-col justify-between">
+              <div>
+                <h3 className="text-xl font-bold mb-2">System Health</h3>
+                <p className="text-stone-400 text-sm mb-8">Real-time status of the OD portal services</p>
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-stone-300">Database Connection</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-stone-300">File Storage Service</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-stone-300">Auth Provider</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+                  </div>
+                </div>
+              </div>
+              <div className="pt-8 mt-8 border-t border-stone-800">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-stone-500 font-black mb-1">Last Updated</p>
+                <p className="text-xs font-mono text-stone-300">{new Date().toLocaleTimeString()}</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'faculty' && stats && (
+        <motion.div 
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden"
+        >
+          <div className="p-8 border-b border-stone-100">
+            <h3 className="text-xl font-bold text-stone-900">Faculty Login Statistics</h3>
+            <p className="text-sm text-stone-500">Monitoring faculty engagement and activity</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-stone-50 text-stone-400 text-[10px] uppercase font-black tracking-widest">
+                <tr>
+                  <th className="px-8 py-5">Faculty Member</th>
+                  <th className="px-8 py-5">Department</th>
+                  <th className="px-8 py-5">Login Count</th>
+                  <th className="px-8 py-5">Last Login</th>
+                  <th className="px-8 py-5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {stats.facultyStats.map((f: any) => (
+                  <tr key={f.email} className="hover:bg-stone-50 transition-colors">
+                    <td className="px-8 py-6">
+                      <div className="font-bold text-stone-900">{f.name}</div>
+                      <div className="text-xs text-stone-500">{f.email}</div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <span className="text-xs font-black uppercase tracking-wider text-stone-600 bg-stone-100 px-3 py-1 rounded-lg">
+                        {f.department}
+                      </span>
+                    </td>
+                    <td className="px-8 py-6 font-mono text-sm font-bold text-stone-900">
+                      {f.login_count || 0}
+                    </td>
+                    <td className="px-8 py-6 text-sm text-stone-500">
+                      {f.last_login ? new Date(f.last_login).toLocaleString() : 'Never'}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          f.last_login && (new Date().getTime() - new Date(f.last_login).getTime() < 300000) 
+                            ? "bg-emerald-500" 
+                            : "bg-stone-300"
+                        )} />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                          {f.last_login && (new Date().getTime() - new Date(f.last_login).getTime() < 300000) ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
+
+      {activeTab === 'requests' && (
+        <motion.div 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="space-y-8"
+        >
+          {/* Filters */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 flex flex-wrap gap-6 items-center">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Filter Department:</span>
+              <select 
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className="bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold text-stone-900 outline-none focus:ring-2 focus:ring-stone-900 uppercase"
+              >
+                <option value="all">All Departments</option>
+                {Array.from(new Set(requests.map(r => r.department))).map((dept: string) => (
+                  <option key={dept} value={dept}>{dept.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Filter Status:</span>
+              <div className="flex bg-stone-100 p-1 rounded-xl border border-stone-200">
+                {['all', 'Pending', 'Approved', 'Rejected'].map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                      filterStatus === status 
+                        ? "bg-white text-stone-900 shadow-sm" 
+                        : "text-stone-500 hover:text-stone-700"
+                    )}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="ml-auto text-[10px] font-black uppercase tracking-widest text-stone-400">
+              Showing {requests.filter(r => {
+                const matchDept = filterDepartment === 'all' || r.department === filterDepartment;
+                const matchStatus = filterStatus === 'all' || r.status === filterStatus;
+                return matchDept && matchStatus;
+              }).length} of {requests.length} Requests
+            </div>
+          </div>
+
+          {(filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).map((dept: string) => {
+            const deptRequests = requests.filter(r => 
+              r.department === dept && 
+              (filterStatus === 'all' || r.status === filterStatus)
+            );
+            
+            if (deptRequests.length === 0 && filterDepartment !== 'all') {
+               return (
+                 <div key={dept} className="bg-white rounded-3xl p-20 text-center border border-stone-200">
+                   <FileText size={48} className="mx-auto text-stone-200 mb-4" />
+                   <p className="text-stone-400 font-bold uppercase tracking-widest">No matching requests in this department</p>
+                 </div>
+               );
+            }
+
+            if (deptRequests.length === 0) return null;
+
+            return (
+              <div key={dept} className="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">
+                <div className="p-6 bg-stone-50 border-b border-stone-200 flex justify-between items-center">
+                  <h3 className="text-lg font-black uppercase tracking-widest text-stone-900">{dept} Department</h3>
+                  <span className="text-xs font-bold text-stone-500 px-3 py-1 bg-white rounded-full border border-stone-200">
+                    {deptRequests.length} Requests
+                  </span>
+                </div>
+                <div className="divide-y divide-stone-100">
+                  {deptRequests.map(r => (
+                    <div 
+                      key={r.id} 
+                      className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer group"
+                      onClick={() => setSelectedReq(r)}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 group-hover:bg-stone-200 transition-all">
+                          <FileText size={20} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-900">{r.student_name}</p>
+                          <p className="text-xs text-stone-500 font-medium">{r.date} • {r.year.replace('-', ' ').toUpperCase()}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <StatusBadge status={r.status} />
+                        <ChevronRight className="text-stone-300 group-hover:text-stone-900 transition-all" size={20} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          
+          {requests.length > 0 && (filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).every(dept => 
+            requests.filter(r => r.department === dept && (filterStatus === 'all' || r.status === filterStatus)).length === 0
+          ) && (
+            <div className="bg-white rounded-3xl p-20 text-center border border-stone-200">
+              <FileText size={48} className="mx-auto text-stone-200 mb-4" />
+              <p className="text-stone-400 font-bold uppercase tracking-widest">No requests match your filters</p>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <AnimatePresence>
         {selectedReq && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-black/5"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl border border-white/20 overflow-hidden"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-stone-900">Request Details</h3>
+              <div className="relative h-48 bg-stone-900 p-10 flex items-end justify-between">
+                <div className="absolute top-6 right-6">
+                  <button 
+                    onClick={() => setSelectedReq(null)}
+                    className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <div>
+                  <h3 className="text-3xl font-black text-white tracking-tight uppercase">{selectedReq.student_name}</h3>
+                  <p className="text-stone-400 font-bold uppercase tracking-widest text-xs mt-1">
+                    {selectedReq.department} • {selectedReq.year.replace('-', ' ')}
+                  </p>
+                </div>
                 <StatusBadge status={selectedReq.status} />
               </div>
               
-              <div className="space-y-4 mb-8 p-5 bg-stone-50 rounded-2xl border border-stone-100">
-                <div className="grid grid-cols-2 gap-y-4">
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Student Name</p>
-                    <p className="text-sm font-semibold text-stone-900">{selectedReq.student_name}</p>
+              <div className="p-10">
+                <div className="grid grid-cols-2 gap-10 mb-10">
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Request Date</p>
+                      <p className="text-lg font-bold text-stone-900">{selectedReq.date}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Time Slot</p>
+                      <p className="text-lg font-bold text-stone-900">
+                        {selectedReq.ongoing_time || '--:--'} to {selectedReq.arrival_time || '--:--'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Reason</p>
+                      <p className="text-sm text-stone-600 leading-relaxed font-medium">{selectedReq.reason}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Department</p>
-                    <p className="text-sm font-semibold text-stone-900 uppercase">{selectedReq.department}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Year</p>
-                    <p className="text-sm font-semibold text-stone-900 capitalize">{selectedReq.year.replace('-', ' ')}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Date</p>
-                    <p className="text-sm font-semibold text-stone-900">{selectedReq.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Ongoing Time</p>
-                    <p className="text-sm font-semibold text-stone-900">{selectedReq.ongoing_time || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Arrival Time</p>
-                    <p className="text-sm font-semibold text-stone-900">{selectedReq.arrival_time || '-'}</p>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-3">Proof Document</p>
+                      {selectedReq.proof_file ? (
+                        <div className="group relative rounded-2xl overflow-hidden border border-stone-200 aspect-video bg-stone-50">
+                          {selectedReq.proof_file.match(/\.(jpg|jpeg|png|gif)$/i) ? (
+                            <img 
+                              src={`/uploads/${selectedReq.proof_file}`} 
+                              alt="Proof" 
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-stone-300">
+                              <FileText size={40} />
+                            </div>
+                          )}
+                          <a 
+                            href={`/uploads/${selectedReq.proof_file}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="absolute inset-0 bg-stone-900/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center text-white font-bold text-sm backdrop-blur-[2px]"
+                          >
+                            View Full Document
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border-2 border-dashed border-stone-200 p-6 text-center text-stone-400 text-xs font-bold uppercase tracking-widest">
+                          No proof uploaded
+                        </div>
+                      )}
+                    </div>
+                    {selectedReq.remarks && (
+                      <div>
+                        <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Faculty Remarks</p>
+                        <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 italic text-sm text-stone-600">
+                          "{selectedReq.remarks}"
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                
-                <div className="pt-4 border-t border-stone-200">
-                  <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Reason</p>
-                  <p className="text-sm text-stone-700 leading-relaxed">{selectedReq.reason}</p>
-                </div>
 
-                {selectedReq.proof_file && (
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-2">Proof Document</p>
-                    <a 
-                      href={`/uploads/${selectedReq.proof_file}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition-all"
-                    >
-                      <FileText size={14} />
-                      View Attachment
-                    </a>
-                  </div>
-                )}
-
-                {selectedReq.remarks && (
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider mb-1">Faculty Remarks</p>
-                    <p className="text-sm text-stone-600 italic">"{selectedReq.remarks}"</p>
-                  </div>
-                )}
+                <button 
+                  onClick={() => setSelectedReq(null)}
+                  className="w-full py-5 bg-stone-900 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-stone-800 transition-all shadow-xl shadow-stone-900/20"
+                >
+                  Close Record
+                </button>
               </div>
-
-              <button 
-                onClick={() => setSelectedReq(null)}
-                className="w-full py-3 bg-stone-900 text-white rounded-xl font-bold hover:bg-stone-800 transition-all"
-              >
-                Close Details
-              </button>
             </motion.div>
           </div>
         )}
