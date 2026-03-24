@@ -33,10 +33,25 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    
+    const contentType = res.headers.get('content-type');
+    const isJson = contentType && contentType.includes('application/json');
+    
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Registration failed');
+      let errorMessage = 'Registration failed';
+      if (isJson) {
+        const error = await res.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        errorMessage = `Server error: ${res.status} ${res.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
+    
+    if (!isJson) {
+      throw new Error('Expected JSON response from server, but received something else.');
+    }
+    
     return res.json();
   },
 
@@ -46,10 +61,25 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    
+    const contentType = res.headers.get('content-type');
+    const isJson = contentType && contentType.includes('application/json');
+    
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Invalid email or password');
+      let errorMessage = 'Invalid email or password';
+      if (isJson) {
+        const error = await res.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        errorMessage = `Server error: ${res.status} ${res.statusText}`;
+      }
+      throw new Error(errorMessage);
     }
+    
+    if (!isJson) {
+      throw new Error('Expected JSON response from server, but received something else.');
+    }
+    
     return res.json();
   },
 

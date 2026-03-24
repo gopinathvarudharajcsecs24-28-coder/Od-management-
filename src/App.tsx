@@ -9,6 +9,19 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const formatTime = (time: string | null) => {
+  if (!time) return '-';
+  try {
+    const [hours, minutes] = time.split(':');
+    const h = parseInt(hours);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+  } catch (e) {
+    return time;
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +30,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'student' | 'faculty' | 'admin'>('student');
-  const [department, setDepartment] = useState('cse');
+  const [department, setDepartment] = useState('CSE');
   const [year, setYear] = useState('first-year');
   const [error, setError] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -30,7 +43,7 @@ export default function App() {
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [profileError, setProfileError] = useState('');
 
-  const departments = ['cse', 'cyber security', 'iot', 'csd', 'bmi', 'ece', 'eee'];
+  const departments = ['CSE', 'CYBER SECURITY', 'IOT', 'CSD', 'BMI', 'ECE', 'EEE'];
   const years = ['first-year', 'second-year', 'third-year', 'final-year'];
 
   useEffect(() => {
@@ -56,11 +69,6 @@ export default function App() {
       let userData;
       if (authMode === 'login') {
         userData = await api.login({ email, password });
-        // Optional: Verify department if selected at login
-        if (role === 'faculty' && userData.role === 'faculty' && userData.department !== department) {
-          setError(`This account belongs to the ${userData.department.toUpperCase()} department.`);
-          return;
-        }
       } else {
         userData = await api.register({ 
           name, 
@@ -133,16 +141,58 @@ export default function App() {
           
           <form onSubmit={handleAuth} className="space-y-4">
             {authMode === 'signup' && (
-              <div>
-                <label className="block text-sm font-medium text-stone-700 mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  required
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Role</label>
+                  <select 
+                    value={role} 
+                    onChange={(e) => setRole(e.target.value as any)}
+                    className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    required
+                  >
+                    <option value="student">Student</option>
+                    <option value="faculty">Faculty</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Department</label>
+                  <select 
+                    value={department} 
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all uppercase"
+                    required
+                  >
+                    {departments.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+                {role === 'student' && (
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Year</label>
+                    <select 
+                      value={year} 
+                      onChange={(e) => setYear(e.target.value)}
+                      className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all capitalize"
+                      required
+                    >
+                      {years.map(y => (
+                        <option key={y} value={y}>{y.replace('-', ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
             <div>
               <label className="block text-sm font-medium text-stone-700 mb-1">Email Address</label>
@@ -173,49 +223,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-stone-700 mb-1">Role</label>
-              <select 
-                value={role} 
-                onChange={(e) => setRole(e.target.value as any)}
-                className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-              >
-                <option value="student">Student</option>
-                <option value="faculty">Faculty</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
 
-            {(role === 'student' || (role === 'faculty' && authMode === 'login') || (role === 'faculty' && authMode === 'signup')) && (
-              <div className={cn("grid gap-4", role === 'student' ? "grid-cols-2" : "grid-cols-1")}>
-                <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">Department</label>
-                  <select 
-                    value={department} 
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  >
-                    {departments.map((dept) => (
-                      <option key={dept} value={dept}>{dept.toUpperCase()}</option>
-                    ))}
-                  </select>
-                </div>
-                {role === 'student' && (
-                  <div>
-                    <label className="block text-sm font-medium text-stone-700 mb-1">Year</label>
-                    <select 
-                      value={year} 
-                      onChange={(e) => setYear(e.target.value)}
-                      className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    >
-                      {years.map((y) => (
-                        <option key={y} value={y}>{y.replace('-', ' ')}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-            )}
             {error && <p className="text-red-500 text-sm">{error}</p>}
             <button 
               type="submit"
@@ -479,7 +487,7 @@ function StudentDashboard({ user }: { user: User }) {
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   const prevRequestsRef = React.useRef<ODRequest[]>([]);
   const [formData, setFormData] = useState({
-    department: user.department || 'cse',
+    department: user.department || 'CSE',
     year: user.year || 'first-year',
     date: '',
     ongoing_time: '',
@@ -488,7 +496,7 @@ function StudentDashboard({ user }: { user: User }) {
     proof: null as File | null
   });
 
-  const departments = ['cse', 'cyber security', 'iot', 'csd', 'bmi', 'ece', 'eee'];
+  const departments = ['CSE', 'CYBER SECURITY', 'IOT', 'CSD', 'BMI', 'ECE', 'EEE'];
   const years = ['first-year', 'second-year', 'third-year', 'final-year'];
 
   const fetchRequests = async () => {
@@ -524,7 +532,7 @@ function StudentDashboard({ user }: { user: User }) {
     const data = new FormData();
     data.append('student_id', user.id);
     data.append('student_name', user.name);
-    data.append('department', user.department || 'cse');
+    data.append('department', user.department || 'CSE');
     data.append('year', formData.year);
     data.append('date', formData.date);
     data.append('ongoing_time', formData.ongoing_time);
@@ -542,7 +550,7 @@ function StudentDashboard({ user }: { user: User }) {
       setTimeout(() => setNotification(null), 5000);
       fetchRequests();
       setFormData({ 
-        department: user.department || 'cse', 
+        department: user.department || 'CSE', 
         year: user.year || 'first-year', 
         date: '', 
         ongoing_time: '', 
@@ -629,8 +637,8 @@ function StudentDashboard({ user }: { user: User }) {
                   <td className="px-6 py-4 text-sm text-stone-900 font-medium">{req.date}</td>
                   <td className="px-6 py-4 text-sm text-stone-600 uppercase">{req.department}</td>
                   <td className="px-6 py-4 text-sm text-stone-600 capitalize">{req.year}</td>
-                  <td className="px-6 py-4 text-sm text-stone-600">{req.ongoing_time || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-stone-600">{req.arrival_time || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-stone-600">{formatTime(req.ongoing_time)}</td>
+                  <td className="px-6 py-4 text-sm text-stone-600">{formatTime(req.arrival_time)}</td>
                   <td className="px-6 py-4 text-sm text-stone-600">{req.reason}</td>
                   <td className="px-6 py-4">
                     <StatusBadge status={req.status} />
@@ -910,8 +918,8 @@ function FacultyDashboard({ user }: { user: User }) {
                 <p className="text-sm"><span className="font-semibold">Year:</span> <span className="capitalize">{selectedReq.year}</span></p>
                 <p className="text-sm"><span className="font-semibold">Date:</span> {selectedReq.date}</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <p className="text-sm"><span className="font-semibold">Ongoing:</span> {selectedReq.ongoing_time || '-'}</p>
-                  <p className="text-sm"><span className="font-semibold">Arrival:</span> {selectedReq.arrival_time || '-'}</p>
+                  <p className="text-sm"><span className="font-semibold">Ongoing:</span> {formatTime(selectedReq.ongoing_time)}</p>
+                  <p className="text-sm"><span className="font-semibold">Arrival:</span> {formatTime(selectedReq.arrival_time)}</p>
                 </div>
                 <p className="text-sm"><span className="font-semibold">Reason:</span> {selectedReq.reason}</p>
                 {selectedReq.proof_file && (
@@ -1292,7 +1300,7 @@ function AdminDashboard({ user }: { user: User }) {
                           </div>
                           <div>
                             <p className="font-bold text-stone-900 text-sm">{r.student_name}</p>
-                            <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">ID: {r.student_id} • {r.date} • {r.year.replace('-', ' ')}</p>
+                            <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">ID: {r.student_id} • {r.date} • {r.year.replace('-', ' ')} • {formatTime(r.ongoing_time)}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
@@ -1366,7 +1374,7 @@ function AdminDashboard({ user }: { user: User }) {
                     <div>
                       <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Time Slot</p>
                       <p className="text-lg font-bold text-stone-900">
-                        {selectedReq.ongoing_time || '--:--'} to {selectedReq.arrival_time || '--:--'}
+                        {formatTime(selectedReq.ongoing_time)} to {formatTime(selectedReq.arrival_time)}
                       </p>
                     </div>
                     <div>
@@ -1462,14 +1470,11 @@ function AdminDashboard({ user }: { user: User }) {
                   <select 
                     value={editDept}
                     onChange={(e) => setEditDept(e.target.value)}
-                    className="w-full p-4 bg-stone-50 rounded-2xl border-none focus:ring-2 focus:ring-stone-900 outline-none font-medium appearance-none"
+                    className="w-full p-4 bg-stone-50 rounded-2xl border-none focus:ring-2 focus:ring-stone-900 outline-none font-medium appearance-none uppercase"
                   >
-                    <option value="cse">CSE</option>
-                    <option value="ece">ECE</option>
-                    <option value="eee">EEE</option>
-                    <option value="mech">MECH</option>
-                    <option value="civil">CIVIL</option>
-                    <option value="it">IT</option>
+                    {['CSE', 'CYBER SECURITY', 'IOT', 'CSD', 'BMI', 'ECE', 'EEE', 'MECH', 'CIVIL', 'IT'].map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
                   </select>
                 </div>
               </div>
