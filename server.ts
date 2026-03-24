@@ -87,10 +87,10 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', (req, res) => {
-    const { email, password, department, year } = req.body;
+    const { name, email, password, department, year } = req.body;
     try {
-      const stmt = db.prepare('UPDATE users SET email = ?, password = ?, department = ?, year = ? WHERE id = ?');
-      stmt.run(email, password, department || null, year || null, req.params.id);
+      const stmt = db.prepare('UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), password = COALESCE(?, password), department = COALESCE(?, department), year = COALESCE(?, year) WHERE id = ?');
+      stmt.run(name, email, password, department || null, year || null, req.params.id);
       const user = db.prepare('SELECT id, name, email, password, role, department, year FROM users WHERE id = ?').get(req.params.id);
       res.json(user);
     } catch (error: any) {
@@ -99,6 +99,15 @@ async function startServer() {
       } else {
         res.status(500).json({ error: error.message });
       }
+    }
+  });
+
+  app.delete('/api/users/:id', (req, res) => {
+    try {
+      db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
     }
   });
 
@@ -161,7 +170,7 @@ async function startServer() {
   app.get('/api/admin/stats', (req, res) => {
     try {
       const totalStudents = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'student'").get().count;
-      const facultyStats = db.prepare("SELECT name, email, department, login_count, last_login FROM users WHERE role = 'faculty'").all();
+      const facultyStats = db.prepare("SELECT id, name, email, department, login_count, last_login FROM users WHERE role = 'faculty'").all();
       const odStats = db.prepare(`
         SELECT 
           COUNT(*) as total,

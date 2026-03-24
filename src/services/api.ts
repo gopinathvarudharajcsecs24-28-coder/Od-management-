@@ -98,7 +98,7 @@ export const api = {
     return res.json();
   },
 
-  async updateProfile(id: string, data: { email: string; password?: string; department?: string; year?: string }): Promise<User> {
+  async updateProfile(id: string, data: { name?: string; email: string; password?: string; department?: string; year?: string }): Promise<User> {
     const res = await fetch(`${API_URL}/api/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -109,5 +109,15 @@ export const api = {
       throw new Error(error.error || 'Update failed');
     }
     return res.json();
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    const res = await fetch(`${API_URL}/api/users/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Delete failed');
+    }
   }
 };

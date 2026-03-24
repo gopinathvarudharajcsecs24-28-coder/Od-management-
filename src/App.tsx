@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, User, ODRequest } from './services/api';
-import { LogOut, User as UserIcon, FileText, CheckCircle, XCircle, Clock, Plus, Shield, Users, BarChart, Edit, Save, Eye, EyeOff, ChevronRight, X } from 'lucide-react';
+import { LogOut, User as UserIcon, FileText, CheckCircle, XCircle, Clock, Plus, Shield, Users, BarChart, Edit, Save, Eye, EyeOff, ChevronRight, X, Trash2, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -56,13 +56,18 @@ export default function App() {
       let userData;
       if (authMode === 'login') {
         userData = await api.login({ email, password });
+        // Optional: Verify department if selected at login
+        if (role === 'faculty' && userData.role === 'faculty' && userData.department !== department) {
+          setError(`This account belongs to the ${userData.department.toUpperCase()} department.`);
+          return;
+        }
       } else {
         userData = await api.register({ 
           name, 
           email, 
           password, 
           role, 
-          department: role === 'student' ? department : undefined,
+          department: (role === 'student' || role === 'faculty') ? department : undefined,
           year: role === 'student' ? year : undefined
         });
       }
@@ -168,47 +173,45 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {authMode === 'signup' && (
-              <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-stone-700 mb-1">Role</label>
+              <select 
+                value={role} 
+                onChange={(e) => setRole(e.target.value as any)}
+                className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              >
+                <option value="student">Student</option>
+                <option value="faculty">Faculty</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+
+            {(role === 'student' || (role === 'faculty' && authMode === 'login') || (role === 'faculty' && authMode === 'signup')) && (
+              <div className={cn("grid gap-4", role === 'student' ? "grid-cols-2" : "grid-cols-1")}>
                 <div>
-                  <label className="block text-sm font-medium text-stone-700 mb-1">Role</label>
+                  <label className="block text-sm font-medium text-stone-700 mb-1">Department</label>
                   <select 
-                    value={role} 
-                    onChange={(e) => setRole(e.target.value as any)}
+                    value={department} 
+                    onChange={(e) => setDepartment(e.target.value)}
                     className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                   >
-                    <option value="student">Student</option>
-                    <option value="faculty">Faculty</option>
-                    <option value="admin">Admin</option>
+                    {departments.map((dept) => (
+                      <option key={dept} value={dept}>{dept.toUpperCase()}</option>
+                    ))}
                   </select>
                 </div>
-
                 {role === 'student' && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Department</label>
-                      <select 
-                        value={department} 
-                        onChange={(e) => setDepartment(e.target.value)}
-                        className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                      >
-                        {departments.map((dept) => (
-                          <option key={dept} value={dept}>{dept.toUpperCase()}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-stone-700 mb-1">Year</label>
-                      <select 
-                        value={year} 
-                        onChange={(e) => setYear(e.target.value)}
-                        className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                      >
-                        {years.map((y) => (
-                          <option key={y} value={y}>{y.replace('-', ' ')}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-stone-700 mb-1">Year</label>
+                    <select 
+                      value={year} 
+                      onChange={(e) => setYear(e.target.value)}
+                      className="w-full p-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    >
+                      {years.map((y) => (
+                        <option key={y} value={y}>{y.replace('-', ' ')}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
@@ -521,7 +524,7 @@ function StudentDashboard({ user }: { user: User }) {
     const data = new FormData();
     data.append('student_id', user.id);
     data.append('student_name', user.name);
-    data.append('department', formData.department);
+    data.append('department', user.department || 'cse');
     data.append('year', formData.year);
     data.append('date', formData.date);
     data.append('ongoing_time', formData.ongoing_time);
@@ -677,16 +680,12 @@ function StudentDashboard({ user }: { user: User }) {
                   <div className="grid grid-cols-3 items-center gap-4">
                     <label className="text-sm font-semibold text-stone-600">Department:</label>
                     <div className="col-span-2">
-                      <select 
-                        required
-                        value={formData.department}
-                        onChange={(e) => setFormData({...formData, department: e.target.value})}
-                        className="w-full p-2 rounded border border-stone-300 focus:border-blue-500 outline-none transition-all"
-                      >
-                        {departments.map(dept => (
-                          <option key={dept} value={dept}>{dept.toUpperCase()}</option>
-                        ))}
-                      </select>
+                      <input 
+                        type="text" 
+                        disabled
+                        value={user.department?.toUpperCase() || 'CSE'}
+                        className="w-full p-2 rounded border border-stone-300 bg-stone-50 text-stone-500 outline-none uppercase font-bold"
+                      />
                     </div>
                   </div>
 
@@ -840,9 +839,15 @@ function FacultyDashboard({ user }: { user: User }) {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-stone-900">Faculty Panel</h2>
-        <p className="text-stone-500">Review and manage student OD applications</p>
+      <div className="mb-8 flex justify-between items-end">
+        <div>
+          <h2 className="text-3xl font-bold text-stone-900">Faculty Panel</h2>
+          <p className="text-stone-500">Review and manage student OD applications</p>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl">
+          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em]">Monitoring Department</p>
+          <p className="text-lg font-black text-emerald-900 uppercase">{user.department}</p>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
@@ -966,6 +971,11 @@ function AdminDashboard({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'faculty' | 'requests'>('overview');
   const [filterDepartment, setFilterDepartment] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [editingFaculty, setEditingFaculty] = useState<any>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editDept, setEditDept] = useState('');
 
   const fetchData = async () => {
     try {
@@ -981,6 +991,38 @@ function AdminDashboard({ user }: { user: User }) {
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
+    }
+  };
+
+  const handleEditFaculty = (f: any) => {
+    setEditingFaculty(f);
+    setEditName(f.name);
+    setEditEmail(f.email);
+    setEditDept(f.department);
+  };
+
+  const handleUpdateFaculty = async () => {
+    if (!editingFaculty) return;
+    try {
+      await api.updateProfile(editingFaculty.id.toString(), { 
+        name: editName, 
+        email: editEmail, 
+        department: editDept 
+      });
+      setEditingFaculty(null);
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleDeleteFaculty = async (id: number) => {
+    try {
+      await api.deleteUser(id.toString());
+      setShowDeleteConfirm(null);
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -1111,11 +1153,12 @@ function AdminDashboard({ user }: { user: User }) {
                   <th className="px-8 py-5">Login Count</th>
                   <th className="px-8 py-5">Last Login</th>
                   <th className="px-8 py-5">Status</th>
+                  <th className="px-8 py-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {stats.facultyStats.map((f: any) => (
-                  <tr key={f.email} className="hover:bg-stone-50 transition-colors">
+                  <tr key={f.id} className="hover:bg-stone-50 transition-colors">
                     <td className="px-8 py-6">
                       <div className="font-bold text-stone-900">{f.name}</div>
                       <div className="text-xs text-stone-500">{f.email}</div>
@@ -1144,6 +1187,24 @@ function AdminDashboard({ user }: { user: User }) {
                         </span>
                       </div>
                     </td>
+                    <td className="px-8 py-6 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => handleEditFaculty(f)}
+                          className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                          title="Edit Faculty"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => setShowDeleteConfirm(f.id)}
+                          className="p-2 text-stone-400 hover:text-red-600 transition-colors"
+                          title="Delete Faculty"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1159,7 +1220,7 @@ function AdminDashboard({ user }: { user: User }) {
           className="space-y-8"
         >
           {/* Filters */}
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 flex flex-wrap gap-6 items-center">
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 flex flex-wrap gap-6 items-center sticky top-0 z-10">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Filter Department:</span>
               <select 
@@ -1201,66 +1262,66 @@ function AdminDashboard({ user }: { user: User }) {
             </div>
           </div>
 
-          {(filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).map((dept: string) => {
-            const deptRequests = requests.filter(r => 
-              r.department === dept && 
-              (filterStatus === 'all' || r.status === filterStatus)
-            );
+          <div className="flex overflow-x-auto pb-6 gap-8 snap-x scrollbar-hide">
+            {(filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).map((dept: string) => {
+              const deptRequests = requests.filter(r => 
+                r.department === dept && 
+                (filterStatus === 'all' || r.status === filterStatus)
+              );
+              
+              if (deptRequests.length === 0) return null;
+
+              return (
+                <div key={dept} className="min-w-[400px] max-w-[500px] flex-shrink-0 snap-start bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden flex flex-col h-[600px]">
+                  <div className="p-6 bg-stone-900 border-b border-stone-800 flex justify-between items-center">
+                    <h3 className="text-lg font-black uppercase tracking-widest text-white">{dept} Dept</h3>
+                    <span className="text-[10px] font-black text-stone-400 px-3 py-1 bg-white/10 rounded-full border border-white/10 uppercase">
+                      {deptRequests.length} Reqs
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto divide-y divide-stone-100">
+                    {deptRequests.map(r => (
+                      <div 
+                        key={r.id} 
+                        className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer group"
+                        onClick={() => setSelectedReq(r)}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center text-stone-400 group-hover:bg-stone-200 transition-all">
+                            <FileText size={18} />
+                          </div>
+                          <div>
+                            <p className="font-bold text-stone-900 text-sm">{r.student_name}</p>
+                            <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">ID: {r.student_id} • {r.date} • {r.year.replace('-', ' ')}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <StatusBadge status={r.status} />
+                          <ChevronRight className="text-stone-300 group-hover:text-stone-900 transition-all" size={16} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
             
-            if (deptRequests.length === 0 && filterDepartment !== 'all') {
-               return (
-                 <div key={dept} className="bg-white rounded-3xl p-20 text-center border border-stone-200">
-                   <FileText size={48} className="mx-auto text-stone-200 mb-4" />
-                   <p className="text-stone-400 font-bold uppercase tracking-widest">No matching requests in this department</p>
-                 </div>
-               );
-            }
-
-            if (deptRequests.length === 0) return null;
-
-            return (
-              <div key={dept} className="bg-white rounded-3xl shadow-sm border border-stone-200 overflow-hidden">
-                <div className="p-6 bg-stone-50 border-b border-stone-200 flex justify-between items-center">
-                  <h3 className="text-lg font-black uppercase tracking-widest text-stone-900">{dept} Department</h3>
-                  <span className="text-xs font-bold text-stone-500 px-3 py-1 bg-white rounded-full border border-stone-200">
-                    {deptRequests.length} Requests
-                  </span>
-                </div>
-                <div className="divide-y divide-stone-100">
-                  {deptRequests.map(r => (
-                    <div 
-                      key={r.id} 
-                      className="p-6 flex items-center justify-between hover:bg-stone-50 transition-colors cursor-pointer group"
-                      onClick={() => setSelectedReq(r)}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 group-hover:bg-stone-200 transition-all">
-                          <FileText size={20} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-stone-900">{r.student_name}</p>
-                          <p className="text-xs text-stone-500 font-medium">{r.date} • {r.year.replace('-', ' ').toUpperCase()}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6">
-                        <StatusBadge status={r.status} />
-                        <ChevronRight className="text-stone-300 group-hover:text-stone-900 transition-all" size={20} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {requests.length > 0 && (filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).every(dept => 
+              requests.filter(r => r.department === dept && (filterStatus === 'all' || r.status === filterStatus)).length === 0
+            ) && (
+              <div className="bg-white rounded-3xl p-20 text-center border border-stone-200 w-full">
+                <FileText size={48} className="mx-auto text-stone-200 mb-4" />
+                <p className="text-stone-400 font-bold uppercase tracking-widest">No requests match your filters</p>
               </div>
-            );
-          })}
-          
-          {requests.length > 0 && (filterDepartment === 'all' ? Array.from(new Set(requests.map(r => r.department))) : [filterDepartment]).every(dept => 
-            requests.filter(r => r.department === dept && (filterStatus === 'all' || r.status === filterStatus)).length === 0
-          ) && (
-            <div className="bg-white rounded-3xl p-20 text-center border border-stone-200">
-              <FileText size={48} className="mx-auto text-stone-200 mb-4" />
-              <p className="text-stone-400 font-bold uppercase tracking-widest">No requests match your filters</p>
-            </div>
-          )}
+            )}
+            
+            {requests.length === 0 && (
+              <div className="bg-white rounded-3xl p-20 text-center border border-stone-200 w-full">
+                <FileText size={48} className="mx-auto text-stone-200 mb-4" />
+                <p className="text-stone-400 font-bold uppercase tracking-widest">No OD requests found</p>
+              </div>
+            )}
+          </div>
         </motion.div>
       )}
 
@@ -1285,7 +1346,7 @@ function AdminDashboard({ user }: { user: User }) {
                 <div>
                   <h3 className="text-3xl font-black text-white tracking-tight uppercase">{selectedReq.student_name}</h3>
                   <p className="text-stone-400 font-bold uppercase tracking-widest text-xs mt-1">
-                    {selectedReq.department} • {selectedReq.year.replace('-', ' ')}
+                    ID: {selectedReq.student_id} • {selectedReq.department} • {selectedReq.year.replace('-', ' ')}
                   </p>
                 </div>
                 <StatusBadge status={selectedReq.status} />
@@ -1294,6 +1355,10 @@ function AdminDashboard({ user }: { user: User }) {
               <div className="p-10">
                 <div className="grid grid-cols-2 gap-10 mb-10">
                   <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Student ID</p>
+                      <p className="text-lg font-bold text-stone-900">{selectedReq.student_id}</p>
+                    </div>
                     <div>
                       <p className="text-[10px] text-stone-400 uppercase font-black tracking-[0.2em] mb-2">Request Date</p>
                       <p className="text-lg font-bold text-stone-900">{selectedReq.date}</p>
@@ -1358,6 +1423,99 @@ function AdminDashboard({ user }: { user: User }) {
                   className="w-full py-5 bg-stone-900 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-stone-800 transition-all shadow-xl shadow-stone-900/20"
                 >
                   Close Record
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {editingFaculty && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-md border border-black/5"
+            >
+              <h3 className="text-2xl font-bold text-stone-900 mb-6">Edit Faculty</h3>
+              <div className="space-y-4 mb-8">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Name</label>
+                  <input 
+                    type="text" 
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full p-4 bg-stone-50 rounded-2xl border-none focus:ring-2 focus:ring-stone-900 outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Email</label>
+                  <input 
+                    type="email" 
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full p-4 bg-stone-50 rounded-2xl border-none focus:ring-2 focus:ring-stone-900 outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-widest text-stone-400 mb-2">Department</label>
+                  <select 
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    className="w-full p-4 bg-stone-50 rounded-2xl border-none focus:ring-2 focus:ring-stone-900 outline-none font-medium appearance-none"
+                  >
+                    <option value="cse">CSE</option>
+                    <option value="ece">ECE</option>
+                    <option value="eee">EEE</option>
+                    <option value="mech">MECH</option>
+                    <option value="civil">CIVIL</option>
+                    <option value="it">IT</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setEditingFaculty(null)}
+                  className="flex-1 py-4 bg-stone-100 text-stone-600 rounded-2xl font-bold hover:bg-stone-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleUpdateFaculty}
+                  className="flex-1 py-4 bg-stone-900 text-white rounded-2xl font-bold hover:bg-stone-800 transition-all shadow-lg shadow-stone-200"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm border border-black/5 text-center"
+            >
+              <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-stone-900 mb-2">Delete Faculty?</h3>
+              <p className="text-stone-500 mb-8">This action cannot be undone. All data associated with this faculty member will be removed.</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="flex-1 py-4 bg-stone-100 text-stone-600 rounded-2xl font-bold hover:bg-stone-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => handleDeleteFaculty(showDeleteConfirm)}
+                  className="flex-1 py-4 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+                >
+                  Delete
                 </button>
               </div>
             </motion.div>
